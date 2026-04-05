@@ -14,10 +14,11 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Setup Java 17
+      - name: Setup Java 11
+        # Java 11 é o par perfeito para o Gradle 7.x em builds de NDK 24
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '11'
           distribution: 'temurin'
 
       - name: Install NDK 24
@@ -25,36 +26,41 @@ jobs:
           ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;24.0.8215888"
           echo "NDK_PATH=${ANDROID_SDK_ROOT}/ndk/24.0.8215888" >> $GITHUB_ENV
 
-      - name: Reconstruct Project Structure
+      - name: Downgrade & Fix Gradle
         run: |
-          # Movemos o projeto Android para fora da pasta de dependências para simplificar a árvore do Gradle
-          mkdir -p build-root
-          cp -r dependencies/RSDKv5/android/* build-root/
+          cd dependencies/RSDKv5/android
           
-          # Ajustamos os caminhos do local.properties na nova pasta
-          cd build-root
-          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
-          echo "ndk.dir=${{ env.NDK_PATH }}" >> local.properties
+          # Força o Downgrade do Gradle para a 7.4 (evita o bug isCanCancel)
+          sed -i 's/gradle-7.5.1-bin.zip/gradle-7.4-bin.zip/g' gradle/wrapper/gradle-wrapper.properties
           
-          # Garantimos que o gradlew tenha permissão e formato Linux
+          # Ajuste de memória da JVM para impedir o StackOverflow
+          echo "org.gradle.jvmargs=-Xss4m -Xmx2048m" >> gradle.properties
+          
+          # Fix permissões
           sed -i 's/\r$//' gradlew
           chmod +x gradlew
+          
+          # Setup local.properties
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+          echo "ndk.dir=${{ env.NDK_PATH }}" >> local.properties
 
-      - name: Build APK (Final Attempt)
+      - name: Build APK
         run: |
-          cd build-root
+          cd dependencies/RSDKv5/android
           
-          # Rodamos o build com flags de memória aumentada para evitar o StackOverflow
-          export GRADLE_OPTS="-Xss4m -Xmx2048m"
+          # Limpeza total antes de começar
+          ./gradlew clean
           
+          # Build em modo único (Linear)
           ./gradlew assembleDebug \
             --no-daemon \
             --no-parallel \
+            --max-workers 1 \
             -Dorg.gradle.vfs.watch=false \
             -x lint \
             --stacktrace || {
               echo "----------------------------------------------------"
-              echo "ERRO NATIVO DETECTADO NO COMPILADOR"
+              echo "SE CHEGOU AQUI, O GRADLE PASSOU! ERRO NO C++ ABAIXO:"
               echo "----------------------------------------------------"
               find . -name "android_gradle_build_stderr.txt" -exec cat {} +
               exit 1
@@ -65,5 +71,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Sonic-Mania-5Players-APK
-          path: build-root/app/build/outputs/apk/debug/*.apk
+          path: dependencies/RSDKv5/android/app/build/outputs/apk/debug/*.apk
           
