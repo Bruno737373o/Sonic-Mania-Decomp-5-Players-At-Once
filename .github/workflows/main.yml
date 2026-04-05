@@ -23,31 +23,30 @@ jobs:
 
       - name: Setup Android NDK
         run: |
-          # Instalando a versão r25c (mais compatível com esse código antigo)
           ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
           echo "NDK_PATH=${ANDROID_SDK_ROOT}/ndk/25.2.9519653" >> $GITHUB_ENV
 
       - name: Build APK
         run: |
-          # Navega até a pasta que vimos no seu print
           cd dependencies/RSDKv5/android
           
-          # Remove lixo de builds anteriores e corrige quebras de linha
-          rm -rf .gradle .externalNativeBuild .cxx app/build
+          # Limpeza e correção de arquivos
           sed -i 's/\r$//' gradlew
           chmod +x gradlew
           
-          # Cria o arquivo de configuração de caminhos
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
           echo "ndk.dir=${{ env.NDK_PATH }}" >> local.properties
 
-          # Executa o build
-          # -x lint: pula verificações de código que travam o build à toa
-          ./gradlew assembleDebug \
-            -Pandroid.ndkPath=${{ env.NDK_PATH }} \
-            -x lint \
-            --no-daemon \
-            --stacktrace
+          # O comando abaixo tenta o build e, se falhar, EXIBE O LOG DO CMAKE
+          ./gradlew assembleDebug -Pandroid.ndkPath=${{ env.NDK_PATH }} --no-daemon || {
+            echo "----------------------------------------------------"
+            echo "ERRO DETECTADO NO CMAKE! EXIBINDO LOGS NATIVOS:"
+            echo "----------------------------------------------------"
+            # Tenta encontrar e exibir o log de erro do compilador C++
+            find . -name "android_gradle_build_stderr.txt" -exec cat {} +
+            find . -name "ninja_log" -exec tail -n 20 {} +
+            exit 1
+          }
 
       - name: Upload APK
         if: success()
