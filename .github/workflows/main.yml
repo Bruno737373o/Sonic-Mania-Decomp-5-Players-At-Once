@@ -26,30 +26,39 @@ jobs:
           ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;24.0.8215888"
           echo "NDK_PATH=${ANDROID_SDK_ROOT}/ndk/24.0.8215888" >> $GITHUB_ENV
 
+      - name: Prepare Source Code
+        run: |
+          # O projeto Android espera que o código fonte esteja em pastas específicas
+          # Vamos garantir que a estrutura esteja correta para o compilador
+          cd dependencies/RSDKv5/android
+          
+          # Criar link simbólico ou copiar a pasta SonicMania para dentro do escopo do Android
+          # Isso evita o erro de "folder not found" no CMake
+          mkdir -p app/jni/src
+          cp -r ../../../SonicMania/* app/jni/src/ || true
+          
+          # Fix permissions
+          sed -i 's/\r$//' gradlew
+          chmod +x gradlew
+
       - name: Build APK
         run: |
           cd dependencies/RSDKv5/android
           
-          # Fix line endings e permissões
-          sed -i 's/\r$//' gradlew
-          chmod +x gradlew
-          
-          # Criar local.properties
+          # Configuração manual do local.properties
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
           echo "ndk.dir=${{ env.NDK_PATH }}" >> local.properties
 
-          # COMPILAÇÃO COM LOG VERBOSO DO CMAKE
-          # Adicionamos -Pandroid.ndkPath e flags para o Ninja mostrar o erro no console
+          # Build com logs detalhados de tarefas
           ./gradlew assembleDebug \
             --no-daemon \
             --no-parallel \
             -Pandroid.ndkPath=${{ env.NDK_PATH }} \
-            --info || {
+            --console=plain || {
               echo "----------------------------------------------------"
-              echo "BUSCANDO LOGS DE ERRO EM TODOS OS DIRETÓRIOS .cxx"
+              echo "DUMP DE ERRO DO GRADLE (VERIFIQUE AS LINHAS ABAIXO)"
               echo "----------------------------------------------------"
-              # Procura por qualquer arquivo de texto dentro da pasta oculta de build nativo
-              find .cxx -name "*.txt" -exec grep -l "error:" {} + | xargs cat
+              ./gradlew assembleDebug --stacktrace --info
               exit 1
             }
 
