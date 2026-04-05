@@ -32,19 +32,22 @@ jobs:
 
       - name: Build APK
         run: |
-          # 1. Localizar o NDK automaticamente (o GitHub muda a versão de tempos em tempos)
-          # O NDK fica em /usr/local/lib/android/sdk/ndk/[versão]
+          # 1. Localizar o NDK
           NDK_PATH=$(ls -d $ANDROID_SDK_ROOT/ndk/* | tail -1)
           echo "Usando NDK em: $NDK_PATH"
           
-          # 2. Entrar no diretório do projeto Android
+          # 2. Entrar no diretório
           cd dependencies/RSDKv5/android
           
-          # 3. Garantir que o gradlew seja executável
+          # 3. CORREÇÃO CRÍTICA: Remover caracteres de Windows do gradlew (CRLF -> LF)
+          sed -i 's/\r$//' gradlew
+          
+          # 4. Garantir permissão de execução
           chmod +x gradlew
           
-          # 4. Executar o build passando o caminho do NDK e ignorando erros de lint
+          # 5. Executar o build
           ./gradlew assembleRelease -Pandroid.ndkPath=$NDK_PATH
+
           
       - name: Upload APK
         uses: actions/upload-artifact@v4
