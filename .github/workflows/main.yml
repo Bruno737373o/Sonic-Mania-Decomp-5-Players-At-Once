@@ -13,7 +13,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
-          fetch-depth: 0
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
@@ -26,28 +25,31 @@ jobs:
           ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;24.0.8215888"
           echo "NDK_PATH=${ANDROID_SDK_ROOT}/ndk/24.0.8215888" >> $GITHUB_ENV
 
-      - name: Prepare Source
+      - name: Build APK
         run: |
           cd dependencies/RSDKv5/android
+          
+          # Setup do ambiente
           sed -i 's/\r$//' gradlew
           chmod +x gradlew
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
           echo "ndk.dir=${{ env.NDK_PATH }}" >> local.properties
 
-      - name: Build APK
-        run: |
-          cd dependencies/RSDKv5/android
-          
-          # Limpando tudo para garantir que o erro de syntax do Java seja reavaliado
-          ./gradlew clean
-          
-          # assembleDebug ignorando erros de análise estética (Lint)
+          # BUILD COM LOG MÁXIMO
+          # O segredo aqui é o --info e o redirecionamento de erro
           ./gradlew assembleDebug \
             --no-daemon \
             --no-parallel \
-            -x lint \
             -Pandroid.ndkPath=${{ env.NDK_PATH }} \
-            --stacktrace
+            --info --stacktrace || {
+              echo "----------------------------------------------------"
+              echo "PROCURANDO ERRO ESPECÍFICO DO COMPILADOR C++"
+              echo "----------------------------------------------------"
+              # Procura em logs internos do Ninja/CMake
+              find . -name "android_gradle_build_stderr.txt" -exec cat {} +
+              find . -name "compile_commands.json" -exec grep -l "error" {} +
+              exit 1
+            }
           
       - name: Upload APK
         if: success()
@@ -55,4 +57,3 @@ jobs:
         with:
           name: Sonic-Mania-5Players-APK
           path: dependencies/RSDKv5/android/app/build/outputs/apk/debug/*.apk
-          
