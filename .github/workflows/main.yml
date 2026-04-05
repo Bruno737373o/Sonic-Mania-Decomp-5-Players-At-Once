@@ -20,10 +20,11 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      # Substituímos a action quebrada pela configuração manual do NDK
+      # O NDK já está presente em /usr/local/lib/android/sdk/ndk-bundle
       - name: Setup Android NDK
-        uses: nndixon/setup-android-ndk@v1
-        with:
-          ndk-version: r25c
+        run: |
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk-bundle" >> $GITHUB_ENV
 
       - name: Cache Gradle
         uses: actions/cache@v3
@@ -36,15 +37,14 @@ jobs:
             ${{ runner.os }}-gradle-
 
       - name: Build APK
-        # O comando 'cd' entra na pasta onde o arquivo gradlew do projeto Android reside
         run: |
           cd dependencies/RSDKv5/android
           chmod +x gradlew
-          ./gradlew assembleRelease
+          # Passamos o caminho do NDK diretamente para o Gradle por segurança
+          ./gradlew assembleRelease -Pandroid.ndkPath=$ANDROID_SDK_ROOT/ndk-bundle
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Sonic-Mania-5Players-APK
-          # O caminho do APK gerado costuma seguir este padrão no Gradle
           path: dependencies/RSDKv5/android/app/build/outputs/apk/release/*.apk
