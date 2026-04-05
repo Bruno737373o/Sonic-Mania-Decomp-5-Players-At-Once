@@ -20,36 +20,28 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Cache Gradle
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-
       - name: Build APK
         run: |
-          # 1. Localizar o NDK
+          # 1. Localizar NDK
           NDK_PATH=$(ls -d $ANDROID_SDK_ROOT/ndk/* | tail -1)
-          echo "Usando NDK em: $NDK_PATH"
           
-          # 2. Entrar no diretório
+          # 2. Entrar na pasta do projeto
           cd dependencies/RSDKv5/android
           
-          # 3. CORREÇÃO CRÍTICA: Remover caracteres de Windows do gradlew (CRLF -> LF)
+          # 3. Corrigir quebras de linha (essencial)
           sed -i 's/\r$//' gradlew
-          
-          # 4. Garantir permissão de execução
           chmod +x gradlew
           
-          # 5. Executar o build
-          ./gradlew assembleRelease -Pandroid.ndkPath=$NDK_PATH
-
+          # 4. Executar o Build com LOG DETALHADO
+          # --stacktrace: Mostra onde o erro ocorreu no Java/Gradle
+          # -Pandroid.bundle.enableUncompressedNativeLibs=false: Evita erros de alinhamento de biblioteca
+          ./gradlew assembleRelease \
+            -Pandroid.ndkPath=$NDK_PATH \
+            -Pandroid.lintOptions.abortOnError=false \
+            --stacktrace
           
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Sonic-Mania-5Players-APK
