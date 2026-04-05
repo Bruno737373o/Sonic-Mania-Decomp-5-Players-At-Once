@@ -21,30 +21,31 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Android NDK
+      - name: Setup Android NDK (Version 24)
         run: |
-          ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
-          echo "NDK_PATH=${ANDROID_SDK_ROOT}/ndk/25.2.9519653" >> $GITHUB_ENV
+          # Instalando exatamente a versão que o seu projeto exige: 24.0.8215888
+          ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;24.0.8215888"
+          echo "NDK_PATH=${ANDROID_SDK_ROOT}/ndk/24.0.8215888" >> $GITHUB_ENV
 
       - name: Build APK
         run: |
           cd dependencies/RSDKv5/android
           
-          # Limpeza e correção de arquivos
+          # Fix line endings
           sed -i 's/\r$//' gradlew
           chmod +x gradlew
           
+          # Configura local.properties com a versão correta
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
           echo "ndk.dir=${{ env.NDK_PATH }}" >> local.properties
 
-          # O comando abaixo tenta o build e, se falhar, EXIBE O LOG DO CMAKE
-          ./gradlew assembleDebug -Pandroid.ndkPath=${{ env.NDK_PATH }} --no-daemon || {
+          # Executa o build
+          # Removi o -Pandroid.ndkPath para deixar o Gradle usar o ndkVersion do build.gradle
+          ./gradlew assembleDebug --no-daemon --stacktrace || {
             echo "----------------------------------------------------"
-            echo "ERRO DETECTADO NO CMAKE! EXIBINDO LOGS NATIVOS:"
+            echo "ERRO NATIVO DETECTADO NO CMAKE:"
             echo "----------------------------------------------------"
-            # Tenta encontrar e exibir o log de erro do compilador C++
             find . -name "android_gradle_build_stderr.txt" -exec cat {} +
-            find . -name "ninja_log" -exec tail -n 20 {} +
             exit 1
           }
 
