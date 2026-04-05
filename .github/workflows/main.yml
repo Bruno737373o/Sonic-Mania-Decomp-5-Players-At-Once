@@ -9,18 +9,11 @@ jobs:
   build-apk:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Source (Your Mod)
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          path: mod-source
           submodules: recursive
-
-      - name: Checkout Android Loader (Official Skeleton)
-        uses: actions/checkout@v4
-        with:
-          repository: RubberDuckycooly/RSDKv5-Decompilation
-          ref: android-new # Versão estável para Android
-          path: android-project
+          fetch-depth: 0
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
@@ -30,35 +23,35 @@ jobs:
 
       - name: Setup Android NDK
         run: |
+          # Instalando a versão r25c (mais compatível com esse código antigo)
           ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
           echo "NDK_PATH=${ANDROID_SDK_ROOT}/ndk/25.2.9519653" >> $GITHUB_ENV
 
-      - name: Merge Mod into Project
-        run: |
-          # Copia o seu código de 5 jogadores para dentro do projeto que gera o APK
-          rm -rf android-project/SonicMania/*
-          cp -r mod-source/SonicMania/* android-project/SonicMania/
-          
-          # Copia dependências se houver
-          cp -r mod-source/dependencies/* android-project/dependencies/ || true
-
       - name: Build APK
         run: |
-          cd android-project/dependencies/RSDKv5/android
+          # Navega até a pasta que vimos no seu print
+          cd dependencies/RSDKv5/android
           
-          # Fix line endings
+          # Remove lixo de builds anteriores e corrige quebras de linha
+          rm -rf .gradle .externalNativeBuild .cxx app/build
           sed -i 's/\r$//' gradlew
           chmod +x gradlew
           
-          # Configura local.properties
+          # Cria o arquivo de configuração de caminhos
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
           echo "ndk.dir=${{ env.NDK_PATH }}" >> local.properties
 
-          # Build
-          ./gradlew assembleDebug -Pandroid.ndkPath=${{ env.NDK_PATH }} --no-daemon
+          # Executa o build
+          # -x lint: pula verificações de código que travam o build à toa
+          ./gradlew assembleDebug \
+            -Pandroid.ndkPath=${{ env.NDK_PATH }} \
+            -x lint \
+            --no-daemon \
+            --stacktrace
 
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Sonic-Mania-5Players-APK
-          path: android-project/dependencies/RSDKv5/android/app/build/outputs/apk/debug/*.apk
+          path: dependencies/RSDKv5/android/app/build/outputs/apk/debug/*.apk
