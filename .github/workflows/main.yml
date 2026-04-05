@@ -20,31 +20,33 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      # Forçamos a instalação da versão r25c, que é a mais estável para esse código
+      - name: Setup Android NDK
+        run: |
+          sudo ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
+          echo "NDK_PATH=${ANDROID_SDK_ROOT}/ndk/25.2.9519653" >> $GITHUB_ENV
+
       - name: Build APK
         run: |
-          # 1. Localizar NDK mais recente disponível
-          NDK_PATH=$(ls -d $ANDROID_SDK_ROOT/ndk/* | tail -1)
-          echo "Utilizando NDK: $NDK_PATH"
-          
-          # 2. Entrar na pasta do projeto Android
           cd dependencies/RSDKv5/android
           
-          # 3. Corrigir quebras de linha do Windows
+          # Corrigir quebras de linha (CRLF para LF)
           sed -i 's/\r$//' gradlew
           chmod +x gradlew
           
-          # 4. Tentar compilar em modo DEBUG (mais rápido e gera logs melhores)
-          # Adicionamos --info para ver o erro exato do C++
+          # Limpeza total antes de começar
+          ./gradlew clean
+          
+          # Build usando a versão específica do NDK que instalamos
           ./gradlew assembleDebug \
-            -Pandroid.ndkPath=$NDK_PATH \
-            -Pandroid.lintOptions.abortOnError=false \
-            --info --stacktrace
+            -Pandroid.ndkPath=${{ env.NDK_PATH }} \
+            --no-daemon \
+            --stacktrace
           
       - name: Upload APK
-        if: always() # Faz o upload mesmo se falhar para tentarmos achar logs nos arquivos
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Sonic-Mania-5Players-Debug-APK
+          name: Sonic-Mania-5Players-APK
           path: |
             dependencies/RSDKv5/android/app/build/outputs/apk/debug/*.apk
-            dependencies/RSDKv5/android/app/build/reports/
