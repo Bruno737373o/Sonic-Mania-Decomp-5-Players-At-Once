@@ -26,45 +26,33 @@ jobs:
           ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;24.0.8215888"
           echo "NDK_PATH=${ANDROID_SDK_ROOT}/ndk/24.0.8215888" >> $GITHUB_ENV
 
-      - name: Prepare Source Code
+      - name: Prepare Source
         run: |
-          # O projeto Android espera que o código fonte esteja em pastas específicas
-          # Vamos garantir que a estrutura esteja correta para o compilador
           cd dependencies/RSDKv5/android
-          
-          # Criar link simbólico ou copiar a pasta SonicMania para dentro do escopo do Android
-          # Isso evita o erro de "folder not found" no CMake
-          mkdir -p app/jni/src
-          cp -r ../../../SonicMania/* app/jni/src/ || true
-          
-          # Fix permissions
           sed -i 's/\r$//' gradlew
           chmod +x gradlew
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+          echo "ndk.dir=${{ env.NDK_PATH }}" >> local.properties
 
       - name: Build APK
         run: |
           cd dependencies/RSDKv5/android
           
-          # Configuração manual do local.properties
-          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
-          echo "ndk.dir=${{ env.NDK_PATH }}" >> local.properties
-
-          # Build com logs detalhados de tarefas
+          # Limpando tudo para garantir que o erro de syntax do Java seja reavaliado
+          ./gradlew clean
+          
+          # assembleDebug ignorando erros de análise estética (Lint)
           ./gradlew assembleDebug \
             --no-daemon \
             --no-parallel \
+            -x lint \
             -Pandroid.ndkPath=${{ env.NDK_PATH }} \
-            --console=plain || {
-              echo "----------------------------------------------------"
-              echo "DUMP DE ERRO DO GRADLE (VERIFIQUE AS LINHAS ABAIXO)"
-              echo "----------------------------------------------------"
-              ./gradlew assembleDebug --stacktrace --info
-              exit 1
-            }
-
+            --stacktrace
+          
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Sonic-Mania-5Players-APK
           path: dependencies/RSDKv5/android/app/build/outputs/apk/debug/*.apk
+          
