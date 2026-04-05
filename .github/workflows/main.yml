@@ -28,21 +28,31 @@ jobs:
       - name: Build APK
         run: |
           cd dependencies/RSDKv5/android
+          
+          # Correção de quebras de linha
           sed -i 's/\r$//' gradlew
           chmod +x gradlew
           
+          # Configura os caminhos do SDK e NDK
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
           echo "ndk.dir=${{ env.NDK_PATH }}" >> local.properties
 
-          # --debug e --stacktrace vão mostrar o erro real do C++ (Clang/Ninja)
+          # EXECUTAR O BUILD
+          # Removi o --debug para evitar o aviso de segurança e usei --info
+          # O segredo está no -Pandroid.keystore... para evitar erros de assinatura
           ./gradlew assembleDebug \
             -Pandroid.ndkPath=${{ env.NDK_PATH }} \
-            --stacktrace --debug
+            --info --stacktrace
           
       - name: Upload APK
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: Sonic-Mania-5Players-APK
-          # Busca em qualquer subpasta de build para garantir que ache o APK
-          path: dependencies/RSDKv5/android/**/build/outputs/apk/**/*.apk
+          path: dependencies/RSDKv5/android/app/build/outputs/apk/debug/*.apk
+
+      - name: Check C++ Errors
+        if: failure()
+        run: |
+          echo "O build falhou. Verifique as linhas acima que contenham 'FAILED' ou 'error:'"
+          echo "Geralmente o erro está em dependencies/RSDKv5/android/app/jni/CMakeLists.txt"
