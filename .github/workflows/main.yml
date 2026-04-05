@@ -1,0 +1,65 @@
+name: Build Mania Android
+
+on:
+  push:
+    paths:
+      - dependencies/**
+      - SonicMania/**
+      - .github/workflows/build.yml
+      - CMakeLists.txt
+    branches:
+      - master
+
+env:
+  # Flags globais para o motor
+  GENERAL_FLAGS: "-DWITH_RSDK=OFF -DCMAKE_BUILD_TYPE=Release -DRETRO_MOBILE=ON"
+  V5_FLAGS: "-DRETRO_REVISION=2"
+  V5U_FLAGS: "-DRETRO_REVISION=3"
+
+jobs:
+  mania-android:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # arm64-v8a: Celulares modernos (64-bit)
+        # armeabi-v7a: Celulares mais antigos (32-bit)
+        arch: [arm64-v8a, armeabi-v7a]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Android NDK
+        uses: nndixon/setup-android-ndk@v1
+        with:
+          ndk-version: r25c
+
+      - name: Build Mania (Android)
+        run: |
+          # Configurações de Cross-Compilation para Android
+          ANDROID_OPTS="-DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_LATEST_HOME/build/cmake/android.toolchain.cmake \
+                        -DANDROID_ABI=${{ matrix.arch }} \
+                        -DANDROID_PLATFORM=android-21"
+
+          # Compilando Versão Standard (v5)
+          cmake -B build_v5 ${{env.GENERAL_FLAGS}} ${{env.V5_FLAGS}} $ANDROID_OPTS
+          cmake --build build_v5 --parallel
+
+          # Compilando Versão Plus (v5U)
+          cmake -B build_v5U ${{env.GENERAL_FLAGS}} ${{env.V5U_FLAGS}} $ANDROID_OPTS
+          cmake --build build_v5U --parallel
+
+      - name: Prepare Artifacts
+        run: |
+          mkdir -p artifacts/v5
+          mkdir -p artifacts/v5U
+          # Busca recursiva pelos arquivos .so gerados
+          find build_v5 -name "*.so" -exec cp {} artifacts/v5/ \;
+          find build_v5U -name "*.so" -exec cp {} artifacts/v5U/ \;
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mania-android-${{ matrix.arch }}
+          path: artifacts
