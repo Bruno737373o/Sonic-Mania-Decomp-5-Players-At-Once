@@ -20,27 +20,29 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      # Forçamos a instalação da versão r25c, que é a mais estável para esse código
       - name: Setup Android NDK
         run: |
-          sudo ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
+          # Instalando uma versão específica e estável para projetos antigos
+          ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
           echo "NDK_PATH=${ANDROID_SDK_ROOT}/ndk/25.2.9519653" >> $GITHUB_ENV
 
       - name: Build APK
         run: |
           cd dependencies/RSDKv5/android
           
-          # Corrigir quebras de linha (CRLF para LF)
+          # Fix para quebras de linha Windows
           sed -i 's/\r$//' gradlew
           chmod +x gradlew
           
-          # Limpeza total antes de começar
-          ./gradlew clean
-          
-          # Build usando a versão específica do NDK que instalamos
+          # Criar arquivo local.properties manualmente para garantir que o SDK/NDK sejam vistos
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+          echo "ndk.dir=${{ env.NDK_PATH }}" >> local.properties
+
+          # Executar build ignorando erros não críticos e forçando o NDK
           ./gradlew assembleDebug \
             -Pandroid.ndkPath=${{ env.NDK_PATH }} \
-            --no-daemon \
+            -Dorg.gradle.daemon=false \
+            -Dorg.gradle.parallel=false \
             --stacktrace
           
       - name: Upload APK
