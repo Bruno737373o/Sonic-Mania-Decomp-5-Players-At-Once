@@ -15,15 +15,15 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Setup Java 17
+      - name: Setup Java 11
+        # Alterado para Java 11, que é mais estável para o Gradle 7.5.1 e Android antigo
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '11'
           distribution: 'temurin'
 
       - name: Setup Android NDK (Version 24)
         run: |
-          # Instalando exatamente a versão que o seu projeto exige: 24.0.8215888
           ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;24.0.8215888"
           echo "NDK_PATH=${ANDROID_SDK_ROOT}/ndk/24.0.8215888" >> $GITHUB_ENV
 
@@ -35,19 +35,29 @@ jobs:
           sed -i 's/\r$//' gradlew
           chmod +x gradlew
           
-          # Configura local.properties com a versão correta
+          # Limpeza agressiva para evitar o loop de nós do Gradle
+          rm -rf .gradle app/build .cxx
+          
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
           echo "ndk.dir=${{ env.NDK_PATH }}" >> local.properties
 
-          # Executa o build
-          # Removi o -Pandroid.ndkPath para deixar o Gradle usar o ndkVersion do build.gradle
-          ./gradlew assembleDebug --no-daemon --stacktrace || {
-            echo "----------------------------------------------------"
-            echo "ERRO NATIVO DETECTADO NO CMAKE:"
-            echo "----------------------------------------------------"
-            find . -name "android_gradle_build_stderr.txt" -exec cat {} +
-            exit 1
-          }
+          # FLAGS CRÍTICAS:
+          # --no-daemon: Evita processos fantasmas
+          # --no-parallel: Impede o loop infinito de execução (Node.isCanCancel)
+          # -Dorg.gradle.vfs.watch=false: Desativa monitoramento de arquivos que buga no Linux
+          ./gradlew assembleDebug \
+            --no-daemon \
+            --no-parallel \
+            -Dorg.gradle.vfs.watch=false \
+            -Pandroid.ndkPath=${{ env.NDK_PATH }} \
+            --stacktrace || {
+              echo "----------------------------------------------------"
+              echo "ERRO NATIVO DETECTADO NO CMAKE:"
+              echo "----------------------------------------------------"
+              # Se falhar aqui, o erro aparecerá no console
+              find . -name "android_gradle_build_stderr.txt" -exec cat {} +
+              exit 1
+            }
 
       - name: Upload APK
         if: success()
