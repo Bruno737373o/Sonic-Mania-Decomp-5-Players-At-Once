@@ -25,54 +25,26 @@ jobs:
           ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;24.0.8215888"
           echo "NDK_PATH=${ANDROID_SDK_ROOT}/ndk/24.0.8215888" >> $GITHUB_ENV
 
-      - name: Debug File Structure
-        run: |
-          echo "--- Verificando onde estão os arquivos do jogo ---"
-          ls -R SonicMania | head -n 20 || echo "Pasta SonicMania não encontrada na raiz!"
-          echo "--- Verificando pasta JNI ---"
-          ls -R dependencies/RSDKv5/android/app/jni/src || echo "Pasta JNI não encontrada!"
-
-      - name: Prepare & Fix Paths
+      - name: Prepare
         run: |
           cd dependencies/RSDKv5/android
-          # Downgrade estável
           sed -i 's/gradle-7.5.1-bin.zip/gradle-7.4-bin.zip/g' gradle/wrapper/gradle-wrapper.properties
           echo "org.gradle.jvmargs=-Xss4m -Xmx2048m" >> gradle.properties
-          
-          # Fix permissões
           sed -i 's/\r$//' gradlew
           chmod +x gradlew
-          
-          # Setup local.properties
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
           echo "ndk.dir=${{ env.NDK_PATH }}" >> local.properties
 
-      - name: Build APK
+      - name: Build APK (Show Java Errors)
         run: |
           cd dependencies/RSDKv5/android
           
-          # Rodar com --debug para capturar o erro exato do CMake quando ele falha na configuração
-          ./gradlew assembleDebug \
-            --no-daemon \
-            --no-parallel \
-            --max-workers 1 \
-            -Dorg.gradle.vfs.watch=false \
-            -x lint \
-            --info || {
-              echo "----------------------------------------------------"
-              echo "ERRO DE CONFIGURAÇÃO DETECTADO!"
-              echo "----------------------------------------------------"
-              # Procura logs de erro do CMake que o Gradle costuma esconder
-              find . -name "CMakeOutput.log" -exec cat {} +
-              find . -name "CMakeError.log" -exec cat {} +
-              # Tenta ler o log de configuração do Android Studio
-              find . -name "android_gradle_build_stderr.txt" -exec cat {} +
-              exit 1
-            }
-          
-      - name: Upload APK
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: Sonic-Mania-5Players-APK
-          path: dependencies/RSDKv5/android/app/build/outputs/apk/debug/*.apk
+          # Rodamos com -q (quiet) e capturamos apenas os erros do compilador Java
+          ./gradlew assembleDebug -x lint --console=plain || {
+            echo "----------------------------------------------------"
+            echo "LISTA DE ERROS NO CÓDIGO JAVA:"
+            echo "----------------------------------------------------"
+            # Este comando vai procurar os erros de compilação no log
+            ./gradlew compileDebugJavaWithJavac --stacktrace
+            exit 1
+          }
