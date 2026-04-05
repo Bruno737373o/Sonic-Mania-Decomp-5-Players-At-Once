@@ -15,15 +15,16 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Setup Java 11
-        # Alterado para Java 11, que é mais estável para o Gradle 7.5.1 e Android antigo
+      - name: Setup Java 17
+        # Java 17 é necessário para o sdkmanager moderno e funciona com Gradle 7.5.1
         uses: actions/setup-java@v4
         with:
-          java-version: '11'
+          java-version: '17'
           distribution: 'temurin'
 
       - name: Setup Android NDK (Version 24)
         run: |
+          # Agora com Java 17, o sdkmanager vai funcionar
           ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;24.0.8215888"
           echo "NDK_PATH=${ANDROID_SDK_ROOT}/ndk/24.0.8215888" >> $GITHUB_ENV
 
@@ -31,30 +32,29 @@ jobs:
         run: |
           cd dependencies/RSDKv5/android
           
-          # Fix line endings
+          # Correção de arquivos
           sed -i 's/\r$//' gradlew
           chmod +x gradlew
           
-          # Limpeza agressiva para evitar o loop de nós do Gradle
+          # Limpeza de lixo
           rm -rf .gradle app/build .cxx
           
+          # Configura local.properties
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
           echo "ndk.dir=${{ env.NDK_PATH }}" >> local.properties
 
-          # FLAGS CRÍTICAS:
-          # --no-daemon: Evita processos fantasmas
-          # --no-parallel: Impede o loop infinito de execução (Node.isCanCancel)
-          # -Dorg.gradle.vfs.watch=false: Desativa monitoramento de arquivos que buga no Linux
+          # FLAGS DE ESTABILIDADE (Cura para o erro Node.isCanCancel)
+          # --no-daemon: Evita processos em segundo plano
+          # --no-parallel: Evita o loop de nós (StackOverflow) do Gradle
+          # -Dorg.gradle.vfs.watch=false: Evita travamento de arquivos no Linux
           ./gradlew assembleDebug \
             --no-daemon \
             --no-parallel \
             -Dorg.gradle.vfs.watch=false \
-            -Pandroid.ndkPath=${{ env.NDK_PATH }} \
             --stacktrace || {
               echo "----------------------------------------------------"
-              echo "ERRO NATIVO DETECTADO NO CMAKE:"
+              echo "ERRO DETECTADO NO CMAKE (C++):"
               echo "----------------------------------------------------"
-              # Se falhar aqui, o erro aparecerá no console
               find . -name "android_gradle_build_stderr.txt" -exec cat {} +
               exit 1
             }
