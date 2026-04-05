@@ -5,6 +5,10 @@ on:
     branches: [ master, main ]
   workflow_dispatch:
 
+env:
+  # Força o uso do Node 24 para evitar os avisos de depreciação do GitHub
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build-apk:
     runs-on: ubuntu-latest
@@ -22,6 +26,7 @@ jobs:
 
       - name: Setup Android NDK
         run: |
+          # Instalando a versão r25c (compatível com CMake antigo)
           ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
           echo "NDK_PATH=${ANDROID_SDK_ROOT}/ndk/25.2.9519653" >> $GITHUB_ENV
 
@@ -29,30 +34,34 @@ jobs:
         run: |
           cd dependencies/RSDKv5/android
           
-          # Correção de quebras de linha
+          # Remove CR do Windows (Causa erro 127/Execução)
           sed -i 's/\r$//' gradlew
           chmod +x gradlew
           
-          # Configura os caminhos do SDK e NDK
+          # Limpeza de builds anteriores e arquivos temporários
+          rm -rf .externalNativeBuild .cxx app/build
+          
+          # Criação do local.properties forçado
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
           echo "ndk.dir=${{ env.NDK_PATH }}" >> local.properties
 
-          # EXECUTAR O BUILD
-          # Removi o --debug para evitar o aviso de segurança e usei --info
-          # O segredo está no -Pandroid.keystore... para evitar erros de assinatura
+          # Execução com flags de compatibilidade
           ./gradlew assembleDebug \
             -Pandroid.ndkPath=${{ env.NDK_PATH }} \
-            --info --stacktrace
+            -Dorg.gradle.daemon=false \
+            -Dorg.gradle.jvmargs="-Xmx2048m" \
+            --stacktrace --info
           
       - name: Upload APK
-        if: always()
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Sonic-Mania-5Players-APK
           path: dependencies/RSDKv5/android/app/build/outputs/apk/debug/*.apk
 
-      - name: Check C++ Errors
+      - name: Debug Failure
         if: failure()
         run: |
-          echo "O build falhou. Verifique as linhas acima que contenham 'FAILED' ou 'error:'"
-          echo "Geralmente o erro está em dependencies/RSDKv5/android/app/jni/CMakeLists.txt"
+          echo "O build falhou em menos de 30 segundos."
+          echo "Isso geralmente significa erro no CMake ou falta de arquivos."
+          echo "Verifique se 'dependencies/RSDKv5/android/app/jni/src/CMakeLists.txt' existe."
