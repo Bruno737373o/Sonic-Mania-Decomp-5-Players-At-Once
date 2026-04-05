@@ -22,27 +22,29 @@ jobs:
 
       - name: Build APK
         run: |
-          # 1. Localizar NDK
+          # 1. Localizar NDK mais recente disponível
           NDK_PATH=$(ls -d $ANDROID_SDK_ROOT/ndk/* | tail -1)
+          echo "Utilizando NDK: $NDK_PATH"
           
-          # 2. Entrar na pasta do projeto
+          # 2. Entrar na pasta do projeto Android
           cd dependencies/RSDKv5/android
           
-          # 3. Corrigir quebras de linha (essencial)
+          # 3. Corrigir quebras de linha do Windows
           sed -i 's/\r$//' gradlew
           chmod +x gradlew
           
-          # 4. Executar o Build com LOG DETALHADO
-          # --stacktrace: Mostra onde o erro ocorreu no Java/Gradle
-          # -Pandroid.bundle.enableUncompressedNativeLibs=false: Evita erros de alinhamento de biblioteca
-          ./gradlew assembleRelease \
+          # 4. Tentar compilar em modo DEBUG (mais rápido e gera logs melhores)
+          # Adicionamos --info para ver o erro exato do C++
+          ./gradlew assembleDebug \
             -Pandroid.ndkPath=$NDK_PATH \
             -Pandroid.lintOptions.abortOnError=false \
-            --stacktrace
+            --info --stacktrace
           
       - name: Upload APK
-        if: success()
+        if: always() # Faz o upload mesmo se falhar para tentarmos achar logs nos arquivos
         uses: actions/upload-artifact@v4
         with:
-          name: Sonic-Mania-5Players-APK
-          path: dependencies/RSDKv5/android/app/build/outputs/apk/release/*.apk
+          name: Sonic-Mania-5Players-Debug-APK
+          path: |
+            dependencies/RSDKv5/android/app/build/outputs/apk/debug/*.apk
+            dependencies/RSDKv5/android/app/build/reports/
