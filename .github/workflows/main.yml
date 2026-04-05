@@ -15,7 +15,6 @@ jobs:
           submodules: recursive
 
       - name: Setup Java 17
-        # Precisamos do 17 para o sdkmanager não dar erro de LinkageError
         uses: actions/setup-java@v4
         with:
           java-version: '17'
@@ -23,18 +22,21 @@ jobs:
 
       - name: Install NDK 24
         run: |
-          # Agora o sdkmanager vai funcionar porque estamos no Java 17
           ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;24.0.8215888"
           echo "NDK_PATH=${ANDROID_SDK_ROOT}/ndk/24.0.8215888" >> $GITHUB_ENV
 
-      - name: Downgrade & Fix Gradle
+      - name: Debug File Structure
+        run: |
+          echo "--- Verificando onde estão os arquivos do jogo ---"
+          ls -R SonicMania | head -n 20 || echo "Pasta SonicMania não encontrada na raiz!"
+          echo "--- Verificando pasta JNI ---"
+          ls -R dependencies/RSDKv5/android/app/jni/src || echo "Pasta JNI não encontrada!"
+
+      - name: Prepare & Fix Paths
         run: |
           cd dependencies/RSDKv5/android
-          
-          # Força o Downgrade do Gradle para a 7.4 (estabilidade)
+          # Downgrade estável
           sed -i 's/gradle-7.5.1-bin.zip/gradle-7.4-bin.zip/g' gradle/wrapper/gradle-wrapper.properties
-          
-          # Aumenta a pilha de memória (Stack) para evitar o erro de recursão
           echo "org.gradle.jvmargs=-Xss4m -Xmx2048m" >> gradle.properties
           
           # Fix permissões
@@ -49,21 +51,21 @@ jobs:
         run: |
           cd dependencies/RSDKv5/android
           
-          # Limpeza
-          ./gradlew clean
-          
-          # Build Linear (Evita o loop isCanCancel)
-          # Se o Gradle 7.4 reclamar do Java 17, ele avisará aqui
+          # Rodar com --debug para capturar o erro exato do CMake quando ele falha na configuração
           ./gradlew assembleDebug \
             --no-daemon \
             --no-parallel \
             --max-workers 1 \
             -Dorg.gradle.vfs.watch=false \
             -x lint \
-            --stacktrace || {
+            --info || {
               echo "----------------------------------------------------"
-              echo "ERRO NATIVO NO C++ DETECTADO:"
+              echo "ERRO DE CONFIGURAÇÃO DETECTADO!"
               echo "----------------------------------------------------"
+              # Procura logs de erro do CMake que o Gradle costuma esconder
+              find . -name "CMakeOutput.log" -exec cat {} +
+              find . -name "CMakeError.log" -exec cat {} +
+              # Tenta ler o log de configuração do Android Studio
               find . -name "android_gradle_build_stderr.txt" -exec cat {} +
               exit 1
             }
