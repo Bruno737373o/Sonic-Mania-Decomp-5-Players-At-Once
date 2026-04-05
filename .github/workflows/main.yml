@@ -14,49 +14,48 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Setup Java 11
-        # O Java 11 evita o erro de recursão (isCanCancel) no Gradle 7.5.1
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
-          java-version: '11'
+          java-version: '17'
           distribution: 'temurin'
 
-      - name: Install NDK 24 via Command Line
-        # Usamos uma forma manual de instalar o NDK para não depender do Java 17
+      - name: Install NDK 24
         run: |
-          sudo ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;24.0.8215888" --sdk_root=${ANDROID_SDK_ROOT}
+          ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;24.0.8215888"
           echo "NDK_PATH=${ANDROID_SDK_ROOT}/ndk/24.0.8215888" >> $GITHUB_ENV
 
-      - name: Build APK
+      - name: Reconstruct Project Structure
         run: |
-          cd dependencies/RSDKv5/android
+          # Movemos o projeto Android para fora da pasta de dependências para simplificar a árvore do Gradle
+          mkdir -p build-root
+          cp -r dependencies/RSDKv5/android/* build-root/
           
-          # Limpeza total de estados anteriores
-          rm -rf .gradle app/build .cxx
-          
-          # Fix permissões
-          sed -i 's/\r$//' gradlew
-          chmod +x gradlew
-          
-          # Setup local.properties
+          # Ajustamos os caminhos do local.properties na nova pasta
+          cd build-root
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
           echo "ndk.dir=${{ env.NDK_PATH }}" >> local.properties
+          
+          # Garantimos que o gradlew tenha permissão e formato Linux
+          sed -i 's/\r$//' gradlew
+          chmod +x gradlew
 
-          # EXECUÇÃO ULTRA-ESTÁVEL
-          # --no-parallel: Mata o erro de recursão isCanCancel
-          # --max-workers 1: Garante que o Gradle não tente ser "esperto" e quebre
-          # -Pandroid.overridePathCheck=true: Evita erros de caminhos longos no Linux
+      - name: Build APK (Final Attempt)
+        run: |
+          cd build-root
+          
+          # Rodamos o build com flags de memória aumentada para evitar o StackOverflow
+          export GRADLE_OPTS="-Xss4m -Xmx2048m"
+          
           ./gradlew assembleDebug \
             --no-daemon \
             --no-parallel \
-            --max-workers 1 \
-            -Pandroid.overridePathCheck=true \
             -Dorg.gradle.vfs.watch=false \
-            -x lint || {
+            -x lint \
+            --stacktrace || {
               echo "----------------------------------------------------"
-              echo "ERRO DETECTADO. BUSCANDO CAUSA NO LOG DO SISTEMA..."
+              echo "ERRO NATIVO DETECTADO NO COMPILADOR"
               echo "----------------------------------------------------"
-              # Se o Gradle travar, tentamos ler o log de saída do compilador
               find . -name "android_gradle_build_stderr.txt" -exec cat {} +
               exit 1
             }
@@ -66,4 +65,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Sonic-Mania-5Players-APK
-          path: dependencies/RSDKv5/android/app/build/outputs/apk/debug/*.apk
+          path: build-root/app/build/outputs/apk/debug/*.apk
+          
